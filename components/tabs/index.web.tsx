@@ -5,6 +5,7 @@ import TabsProps from './PropsType';
 import SwipeableTabContent from 'rc-tabs/lib/SwipeableTabContent';
 import TabContent from 'rc-tabs/lib/TabContent';
 import InkTabBar from 'rc-tabs/lib/InkTabBar';
+import SwipeableInkTabBar from 'rc-tabs/lib/SwipeableInkTabBar';
 import assign from 'object-assign';
 
 const Tabs = React.createClass<TabsProps, any>({
@@ -19,6 +20,8 @@ const Tabs = React.createClass<TabsProps, any>({
       swipeable: true,
       tabBarPosition: 'top',
       hammerOptions: {},
+      pageSize: 5,
+      speed: 5,
       onChange() {},
       onTabClick() {},
     };
@@ -26,17 +29,18 @@ const Tabs = React.createClass<TabsProps, any>({
 
   getInitialState() {
     const { activeKey, defaultActiveKey, children } = this.props;
-    const activeTabKey = activeKey || defaultActiveKey || children[0].props.key;
-    const activeTabIndex = children.findIndex(tabPane => tabPane.key === activeTabKey);
+    const initialActiveKey = activeKey || defaultActiveKey || children[0].key;
     return {
-      // 超过5个的情况下，保证初始时 activeTab 显示在屏幕中间，便于向两侧翻页
-      viewportStartTabIndex: children.length > 5 && activeTabIndex >= 3 ? activeTabIndex - 2 : 0,
+      activeTabIndex: children.findIndex(tab => tab.key === initialActiveKey),
     };
   },
 
   renderTabBar() {
-    const {props} = this;
-    return <InkTabBar onTabClick={this.handleTabClick} inkBarAnimated={props.animated}/>;
+    const { children, animated, speed, pageSize } = this.props;
+    if (children.length > pageSize) {
+      return <SwipeableInkTabBar onTabClick={this.handleSwipeTabClick} speed={speed} pageSize={pageSize} />;
+    }
+    return <InkTabBar inkBarAnimated={animated} />;
   },
 
   renderTabContent() {
@@ -48,63 +52,39 @@ const Tabs = React.createClass<TabsProps, any>({
     );
   },
 
-  getChildren() {
-    const { children } = this.props;
-    const { viewportStartTabIndex } = this.state;
-    return children.slice(viewportStartTabIndex, viewportStartTabIndex + 5);
-  },
-
-  handleTabClick(key) {
+  handleSwipeTabClick(key) {
     this.setState({
-      viewportStartTabIndex: this.getStartTabIndex(key),
+      activeTabIndex: this.props.children.findIndex(tab => tab.key === key),
     });
     this.props.onTabClick(key);
   },
 
-  handleTabChange(key) {
+  handleSwipeTabChange(key) {
     this.setState({
-      viewportStartTabIndex: this.getStartTabIndex(key),
+      activeTabIndex: this.props.children.findIndex(tab => tab.key === key),
     });
     this.props.onChange(key);
   },
 
-  getStartTabIndex(activeTabKey) {
-    const { children } = this.props;
-    const { viewportStartTabIndex } = this.state;
-    const activeTabIndex = children.findIndex(tabPane => tabPane.key === activeTabKey);
-    // 只有一页，则起始tabIndex为0，永远不需要变
-    if (children.length < 5) {
-      return 0;
-    }
-    // 滚到了可视区最左侧且还可以向左翻页
-    if (activeTabIndex === viewportStartTabIndex && viewportStartTabIndex > 0) {
-      return viewportStartTabIndex - 1;
-    }
-    // 滚到了可视区最右侧且还可以向右翻页
-    if (activeTabIndex === viewportStartTabIndex + 4 && viewportStartTabIndex + 4 < children.length - 1) {
-      return viewportStartTabIndex + 1;
-    }
-    // 未到两侧，不翻页
-    return viewportStartTabIndex;
-  },
-
-  getClassName() {
-    const { viewportStartTabIndex } = this.state;
-    const totalTabsCount = this.props.children.length;
-    const cls = className({
-      [`${this.props.prefixCls}-leftpage`]: totalTabsCount > 5 && viewportStartTabIndex > 0,
-      [`${this.props.prefixCls}-rightpage`]: totalTabsCount > 5 && viewportStartTabIndex + 4 < totalTabsCount - 1,
+  getSwipeClassName() {
+    const { activeTabIndex } = this.state;
+    const { children, pageSize, prefixCls } = this.props;
+    const totalTabsCount = children.length;
+    return className({
+      [`${prefixCls}-leftpage`]: activeTabIndex + 1 > pageSize,
+      [`${prefixCls}-rightpage`]: activeTabIndex + 1 < totalTabsCount,
     });
-    return cls;
   },
 
   render() {
-    const newProps = {
-      ...this.props,
-      onChange: this.handleTabChange,
-      children: this.getChildren(),
-      className: assign(this.getClassName(), this.props.className),
-    };
+    const { children, pageSize } = this.props;
+    let newProps = assign({}, this.props);
+    if (children.length > pageSize) {
+      newProps = assign(newProps, {
+        onChange: this.handleSwipeTabChange,
+        className: this.getSwipeClassName(),
+      });
+    }
     return (
       <RcTabs
         renderTabBar={this.renderTabBar}
